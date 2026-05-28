@@ -1,0 +1,8 @@
+.env
+.idea/
+.vscode/
+.agents/
+.codex/
+__pycache__/
+*.pyc
+vector_index/

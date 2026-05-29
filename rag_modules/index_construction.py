@@ -3,6 +3,7 @@
 """
 
 import logging
+import os
 from typing import List
 from pathlib import Path
 
@@ -32,12 +33,30 @@ class IndexConstructionModule:
     def setup_embeddings(self):
         """初始化嵌入模型"""
         logger.info(f"正在初始化嵌入模型: {self.model_name}")
-        
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=self.model_name,
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True}
-        )
+
+        model_path = Path(self.model_name).expanduser()
+        resolved_model_name = str(model_path.resolve()) if model_path.exists() else self.model_name
+
+        if model_path.exists():
+            logger.info(f"检测到本地嵌入模型目录: {resolved_model_name}")
+        elif os.getenv("HF_ENDPOINT"):
+            logger.info(f"当前使用 Hugging Face 镜像: {os.getenv('HF_ENDPOINT')}")
+
+        try:
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name=resolved_model_name,
+                model_kwargs={'device': 'cpu'},
+                encode_kwargs={'normalize_embeddings': True}
+            )
+        except Exception as e:
+            raise RuntimeError(
+                "嵌入模型初始化失败。"
+                " 如果当前网络无法访问 huggingface.co，可在项目 .env 中设置 "
+                "HF_ENDPOINT=https://hf-mirror.com；"
+                " 或者先把 BAAI/bge-small-zh-v1.5 下载到本地，再把 config.py 里的 "
+                "embedding_model 改成本地目录路径。"
+                f" 原始错误: {e}"
+            ) from e
         
         logger.info("嵌入模型初始化完成")
     

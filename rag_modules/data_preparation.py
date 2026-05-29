@@ -28,7 +28,9 @@ class DataPreparationModule:
         'condiment': '调料',
         'drink': '饮品'
     }
+    # [('荤菜', '素菜', xxxxxxxx)]
     CATEGORY_LABELS = list(set(CATEGORY_MAPPING.values()))
+    # 难度类型
     DIFFICULTY_LABELS = ['非常简单', '简单', '中等', '困难', '非常困难']
     
     def __init__(self, data_path: str):
@@ -77,8 +79,8 @@ class DataPreparationModule:
                 doc = Document(
                     page_content=content,
                     metadata={
-                        "source": str(md_file),
-                        "parent_id": parent_id,
+                        "source": str(md_file), # 文件的路径
+                        "parent_id": parent_id, # 根据路径生成的md5码
                         "doc_type": "parent"  # 标记为父文档
                     }
                 )
@@ -88,6 +90,7 @@ class DataPreparationModule:
                 logger.warning(f"读取文件 {md_file} 失败: {e}")
         
         # 增强文档元数据
+        # 获取列表中每一个doc对象，调用增强元数据函数
         for doc in documents:
             self._enhance_metadata(doc)
         
@@ -103,20 +106,22 @@ class DataPreparationModule:
             doc: 需要增强元数据的文档
         """
         file_path = Path(doc.metadata.get('source', ''))
+        # 由于通过路径就可以分别类型，所以这里获取到的是绝对路径
         path_parts = file_path.parts
         
-        # 提取菜品分类
+        # 提取菜品分类 这里是初始化为其他
         doc.metadata['category'] = '其他'
+        # key代表的是类型
         for key, value in self.CATEGORY_MAPPING.items():
             if key in path_parts:
                 doc.metadata['category'] = value
                 break
         
-        # 提取菜品名称
+        # 提取菜品名称 通过路径
         doc.metadata['dish_name'] = file_path.stem
 
         # 分析难度等级
-        content = doc.page_content
+        content = doc.page_content # 这里获取到的是所有内容 直接暴力搜索
         if '★★★★★' in content:
             doc.metadata['difficulty'] = '非常困难'
         elif '★★★★' in content:
@@ -174,6 +179,15 @@ class DataPreparationModule:
         Returns:
             按标题结构分割的文档列表
         """
+
+        """
+        原文档：西红柿炒鸡蛋的做法.md (父文档)
+            ├── 子块1：# 西红柿炒鸡蛋的做法 + 简介 + 难度评级
+            ├── 子块2：## 必备原料和工具 + 食材清单
+            ├── 子块3：## 计算 + 用量配比公式
+            ├── 子块4：## 操作 + 详细制作步骤
+            └── 子块5：## 附加内容
+        """
         # 定义要分割的标题层级
         headers_to_split_on = [
             ("#", "主标题"),      # 菜品名称
@@ -188,7 +202,7 @@ class DataPreparationModule:
         )
 
         all_chunks = []
-
+        # 获得列表中每一个doc对象
         for doc in self.documents:
             try:
                 # 检查文档内容是否包含Markdown标题
@@ -200,6 +214,10 @@ class DataPreparationModule:
                     logger.debug(f"内容预览: {content_preview}")
 
                 # 对每个文档进行Markdown分割
+                # doc.page_content是整个文档
+                # 这个函数会安装 # ## 进行切分 得到按照标题分配的文档块：
+                # [Document(page_content="## 必备原料...\n...", metadata={"二级标
+                #   题": "必备原料"})]
                 md_chunks = markdown_splitter.split_text(doc.page_content)
 
                 logger.debug(f"文档 {doc.metadata.get('dish_name', '未知')} 分割成 {len(md_chunks)} 个chunk")
@@ -209,14 +227,18 @@ class DataPreparationModule:
                     logger.warning(f"文档 {doc.metadata.get('dish_name', '未知')} 未能按标题分割，可能缺少标题结构")
 
                 # 为每个子块建立与父文档的关系
+                # 因为之前生成的有，所以直接获取这个变量即可
                 parent_id = doc.metadata["parent_id"]
 
+                # enumerate会遍历列表，拿到位置编号和文档块对象
+                # 第 1 次循环：i = 0，chunk = Document 对象
                 for i, chunk in enumerate(md_chunks):
                     # 为子块分配唯一ID
                     child_id = str(uuid.uuid4())
 
-                    # 合并原文档元数据和新的标题元数据
+                    # 合并 ！！ 原文档元数据和新的标题元数据
                     chunk.metadata.update(doc.metadata)
+                    # 再把这几个“子块自己的字段”合并进去
                     chunk.metadata.update({
                         "chunk_id": child_id,
                         "parent_id": parent_id,

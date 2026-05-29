@@ -22,7 +22,9 @@ class RetrievalOptimizationModule:
             vectorstore: FAISS向量存储
             chunks: 文档块列表
         """
+        # FAISS向量存储实例
         self.vectorstore = vectorstore
+        #  文档块列表，用于BM25检索
         self.chunks = chunks
         self.setup_retrievers()
 
@@ -134,7 +136,9 @@ class RetrievalOptimizationModule:
 
         # 计算BM25检索结果的RRF分数
         for rank, doc in enumerate(bm25_docs):
+            # 对 chunk.page_content 这个文本内容做 hash
             doc_id = hash(doc.page_content)
+            # 哈希值当做key
             doc_objects[doc_id] = doc
 
             rrf_score = 1.0 / (k + rank + 1)

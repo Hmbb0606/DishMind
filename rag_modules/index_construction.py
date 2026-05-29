@@ -4,7 +4,9 @@
 
 import logging
 import os
-from typing import List
+import json
+import hashlib
+from typing import Dict, List, Optional
 from pathlib import Path
 
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -29,6 +31,11 @@ class IndexConstructionModule:
         self.embeddings = None
         self.vectorstore = None
         self.setup_embeddings()
+
+    @property
+    def manifest_path(self) -> Path:
+        """索引元数据清单文件路径"""
+        return Path(self.index_save_path) / "manifest.json"
     
     def setup_embeddings(self):
         """初始化嵌入模型"""
@@ -98,7 +105,29 @@ class IndexConstructionModule:
         self.vectorstore.add_documents(new_chunks)
         logger.info("新文档添加完成")
 
-    def save_index(self):
+    def build_index_metadata(self, chunks: List[Document], data_path: str) -> Dict[str, object]:
+        """
+        为当前索引构建可比较的元数据，用于判断旧索引是否过期
+        """
+        source_signatures = []
+        for chunk in chunks:
+            source = chunk.metadata.get("source", "")
+            parent_id = chunk.metadata.get("parent_id", "")
+            chunk_index = chunk.metadata.get("chunk_index", -1)
+            source_signatures.append(f"{source}|{parent_id}|{chunk_index}")
+
+        source_signatures.sort()
+        fingerprint = hashlib.md5("\n".join(source_signatures).encode("utf-8")).hexdigest()
+
+        return {
+            "embedding_model": self.model_name,
+            "data_path": str(Path(data_path).resolve()),
+            "document_count": len({chunk.metadata.get("parent_id") for chunk in chunks}),
+            "chunk_count": len(chunks),
+            "fingerprint": fingerprint,
+        }
+
+    def save_index(self, metadata: Optional[Dict[str, object]] = None):
         """
         保存向量索引到配置的路径
         """
@@ -109,9 +138,14 @@ class IndexConstructionModule:
         Path(self.index_save_path).mkdir(parents=True, exist_ok=True)
 
         self.vectorstore.save_local(self.index_save_path)
+        if metadata is not None:
+            self.manifest_path.write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         logger.info(f"向量索引已保存到: {self.index_save_path}")
     
-    def load_index(self):
+    def load_index(self, expected_metadata: Optional[Dict[str, object]] = None):
         """
         从配置的路径加载向量索引
 
@@ -125,6 +159,12 @@ class IndexConstructionModule:
             logger.info(f"索引路径不存在: {self.index_save_path}，将构建新索引")
             return None
 
+        if expected_metadata is not None:
+            manifest = self._load_manifest()
+            if manifest != expected_metadata:
+                logger.info("检测到索引清单与当前数据不匹配，将重建索引")
+                return None
+
         try:
             self.vectorstore = FAISS.load_local(
                 self.index_save_path,
@@ -135,6 +175,17 @@ class IndexConstructionModule:
             return self.vectorstore
         except Exception as e:
             logger.warning(f"加载向量索引失败: {e}，将构建新索引")
+            return None
+
+    def _load_manifest(self) -> Optional[Dict[str, object]]:
+        """加载索引清单"""
+        if not self.manifest_path.exists():
+            return None
+
+        try:
+            return json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning(f"读取索引清单失败: {e}")
             return None
     
     def similarity_search(self, query: str, k: int = 5) -> List[Document]:

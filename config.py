@@ -11,12 +11,15 @@ class RAGConfig:
     """RAG系统配置类"""
 
     # 路径配置
-    data_path: str = "data/C8/cook/dishes"
+    data_path: str = "data/recipes"
     index_save_path: str = "./vector_index"
 
     # 模型配置
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
-    llm_model: str = "kimi-k2.5"
+    llm_provider: str = "deepseek"
+    llm_model: str = "deepseek-v4-flash"
+    llm_base_url: str = ""
+    llm_api_key_env: str = ""
 
     # 检索配置
     top_k: int = 3
@@ -46,7 +49,10 @@ class RAGConfig:
             'data_path': self.data_path,
             'index_save_path': self.index_save_path,
             'embedding_model': self.embedding_model,
+            'llm_provider': self.llm_provider,
             'llm_model': self.llm_model,
+            'llm_base_url': self.llm_base_url,
+            'llm_api_key_env': self.llm_api_key_env,
             'top_k': self.top_k,
             'temperature': self.temperature,
             'max_tokens': self.max_tokens

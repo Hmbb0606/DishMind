@@ -50,10 +50,6 @@ class RecipeRAGSystem:
         # 检查数据路径
         if not Path(self.config.data_path).exists():
             raise FileNotFoundError(f"数据路径不存在: {self.config.data_path}")
-
-        # 检查API密钥
-        if not os.getenv("MOONSHOT_API_KEY"):
-            raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
     
     def initialize_system(self):
         """初始化所有模块"""
@@ -73,7 +69,10 @@ class RecipeRAGSystem:
         # 3. 初始化生成集成模块
         print("🤖 初始化生成集成模块...")
         self.generation_module = GenerationIntegrationModule(
+            provider=self.config.llm_provider,
             model_name=self.config.llm_model,
+            base_url=self.config.llm_base_url,
+            api_key_env=self.config.llm_api_key_env,
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens
         )
@@ -84,40 +83,35 @@ class RecipeRAGSystem:
         """构建知识库"""
         print("\n正在构建知识库...")
 
-        # 1. 尝试加载已保存的索引
-        vectorstore = self.index_module.load_index()
+        # 1. 先加载文档并分块，确保目录或文件变化后不会误用旧索引
+        print("加载食谱文档...")
+        self.data_module.load_documents()
+        print("进行文本分块...")
+        chunks = self.data_module.chunk_documents()
 
+        # 2. 尝试加载与当前数据快照匹配的索引
+        expected_index_metadata = self.index_module.build_index_metadata(
+            chunks=chunks,
+            data_path=self.config.data_path,
+        )
+        vectorstore = self.index_module.load_index(expected_metadata=expected_index_metadata)
         if vectorstore is not None:
             print("✅ 成功加载已保存的向量索引！")
-            # 仍需要加载文档和分块用于检索模块
-            print("加载食谱文档...")
-            self.data_module.load_documents()
-            print("进行文本分块...")
-            chunks = self.data_module.chunk_documents()
         else:
             print("未找到已保存的索引，开始构建新索引...")
-
-            # 2. 加载文档
-            print("加载食谱文档...")
-            self.data_module.load_documents()
-
-            # 3. 文本分块
-            print("进行文本分块...")
-            chunks = self.data_module.chunk_documents()
-
-            # 4. 构建向量索引
+            # 3. 构建向量索引
             print("构建向量索引...")
             vectorstore = self.index_module.build_vector_index(chunks)
 
-            # 5. 保存索引
+            # 4. 保存索引
             print("保存向量索引...")
-            self.index_module.save_index()
+            self.index_module.save_index(metadata=expected_index_metadata)
 
-        # 6. 初始化检索优化模块
+        # 5. 初始化检索优化模块
         print("初始化检索优化...")
         self.retrieval_module = RetrievalOptimizationModule(vectorstore, chunks)
 
-        # 7. 显示统计信息
+        # 6. 显示统计信息
         stats = self.data_module.get_statistics()
         print(f"\n📊 知识库统计:")
         print(f"   文档总数: {stats['total_documents']}")

@@ -9,7 +9,6 @@ from typing import List, Dict, Any
 
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
-from pathlib import Path
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -26,10 +25,11 @@ class DataPreparationModule:
         'staple': '主食',
         'aquatic': '水产',
         'condiment': '调料',
-        'drink': '饮品'
+        'drink': '饮品',
+        'semi-finished': '半成品'
     }
     # [('荤菜', '素菜', xxxxxxxx)]
-    CATEGORY_LABELS = list(set(CATEGORY_MAPPING.values()))
+    CATEGORY_LABELS = list(dict.fromkeys(CATEGORY_MAPPING.values()))
     # 难度类型
     DIFFICULTY_LABELS = ['非常简单', '简单', '中等', '困难', '非常困难']
     

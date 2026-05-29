@@ -2,9 +2,9 @@
 RAG系统主程序
 """
 
-import os
 import sys
 import logging
+import re
 from pathlib import Path
 from typing import List
 
@@ -30,6 +30,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+EXIT_COMMANDS = {'退出', 'quit', 'exit', ''}
 
 class RecipeRAGSystem:
     """食谱RAG系统主类"""
@@ -151,14 +153,27 @@ class RecipeRAGSystem:
             print("🤖 智能分析查询...")
             rewritten_query = self.generation_module.query_rewrite(question)
         
-        # 3. 检索相关子块（自动应用元数据过滤）
+        # 3. 先尝试命中明确菜名；只有没命中时再走通用检索。
         print("🔍 检索相关文档...")
-        filters = self._extract_filters_from_query(question)
-        if filters:
-            print(f"应用过滤条件: {filters}")
-            relevant_chunks = self.retrieval_module.metadata_filtered_search(rewritten_query, filters, top_k=self.config.top_k)
+        relevant_chunks = self._find_direct_match_chunks(question)
+
+        if relevant_chunks:
+            matched_dishes = self._get_unique_dish_names(relevant_chunks)
+            print(f"🎯 命中精确菜名: {', '.join(matched_dishes)}")
         else:
-            relevant_chunks = self.retrieval_module.hybrid_search(rewritten_query, top_k=self.config.top_k)
+            filters = self._extract_filters_from_query(question)
+            if filters:
+                print(f"应用过滤条件: {filters}")
+                relevant_chunks = self.retrieval_module.metadata_filtered_search(
+                    rewritten_query,
+                    filters,
+                    top_k=self.config.top_k
+                )
+            else:
+                relevant_chunks = self.retrieval_module.hybrid_search(
+                    rewritten_query,
+                    top_k=self.config.top_k
+                )
 
         # 显示检索到的子块信息
         if relevant_chunks:
@@ -190,10 +205,7 @@ class RecipeRAGSystem:
             relevant_docs = self.data_module.get_parent_documents(relevant_chunks)
 
             # 显示找到的文档名称
-            doc_names = []
-            for doc in relevant_docs:
-                dish_name = doc.metadata.get('dish_name', '未知菜品')
-                doc_names.append(dish_name)
+            doc_names = self._get_unique_dish_names(relevant_docs)
 
             if doc_names:
                 print(f"找到文档: {', '.join(doc_names)}")
@@ -205,10 +217,7 @@ class RecipeRAGSystem:
             relevant_docs = self.data_module.get_parent_documents(relevant_chunks)
 
             # 显示找到的文档名称
-            doc_names = []
-            for doc in relevant_docs:
-                dish_name = doc.metadata.get('dish_name', '未知菜品')
-                doc_names.append(dish_name)
+            doc_names = self._get_unique_dish_names(relevant_docs)
 
             if doc_names:
                 print(f"找到文档: {', '.join(doc_names)}")
@@ -251,6 +260,52 @@ class RecipeRAGSystem:
                 break
 
         return filters
+
+    def _normalize_text(self, text: str) -> str:
+        """移除空白和常见标点，便于做稳定的菜名匹配。"""
+        return re.sub(r'[\s\W_]+', '', text.lower())
+
+    def _find_direct_match_chunks(self, query: str) -> List:
+        """
+        优先处理明确菜名查询。
+
+        这类问题如果完全依赖向量/BM25 检索，可能因为分词或重排结果
+        把真正的目标菜品挤出前几名，因此先做一次基于 dish_name 的精确匹配。
+        """
+        normalized_query = self._normalize_text(query)
+        matched_parent_ids = []
+
+        for doc in self.data_module.documents:
+            dish_name = doc.metadata.get('dish_name', '')
+            if not dish_name:
+                continue
+
+            normalized_dish_name = self._normalize_text(dish_name)
+            if normalized_dish_name and normalized_dish_name in normalized_query:
+                matched_parent_ids.append(doc.metadata.get('parent_id'))
+
+        if not matched_parent_ids:
+            return []
+
+        matched_chunks = []
+        for parent_id in matched_parent_ids:
+            parent_chunks = [
+                chunk for chunk in self.data_module.chunks
+                if chunk.metadata.get('parent_id') == parent_id
+            ]
+            parent_chunks.sort(key=lambda chunk: chunk.metadata.get('chunk_index', 0))
+            matched_chunks.extend(parent_chunks[:max(self.config.top_k, 3)])
+
+        return matched_chunks
+
+    def _get_unique_dish_names(self, docs: List) -> List[str]:
+        """从文档或子块中提取去重后的菜名列表。"""
+        dish_names = []
+        for doc in docs:
+            dish_name = doc.metadata.get('dish_name', '未知菜品')
+            if dish_name not in dish_names:
+                dish_names.append(dish_name)
+        return dish_names
     
     def search_by_category(self, category: str, query: str = "") -> List[str]:
         """
@@ -304,61 +359,98 @@ class RecipeRAGSystem:
     
     def run_interactive(self):
         """运行交互式问答"""
-        print("=" * 60)
-        print("🍽️  尝尝咸淡RAG系统 - 交互式问答  🍽️")
-        print("=" * 60)
-        print("💡 解决您的选择困难症，告别'今天吃什么'的世纪难题！")
-        
-        # 初始化系统
-        self.initialize_system()
-        
-        # 构建知识库
-        self.build_knowledge_base()
-        
+        self._print_interactive_banner()
+
+        # 先准备好系统依赖，再进入纯粹的问答循环。
+        self._prepare_interactive_session()
+
         print("\n交互式问答 (输入'退出'结束):")
-        
+
         while True:
             try:
-                user_input = input("\n您的问题: ").strip()
-                if user_input.lower() in ['退出', 'quit', 'exit', '']:
+                user_input = self._read_user_question()
+                if self._should_exit_interactive(user_input):
                     break
-                
-                # 询问是否使用流式输出
-                stream_choice = input("是否使用流式输出? (y/n, 默认y): ").strip().lower()
-                use_stream = stream_choice != 'n'
 
-                print("\n回答:")
-                if use_stream:
-                    # 流式输出
-                    for chunk in self.ask_question(user_input, stream=True):
-                        print(chunk, end="", flush=True)
-                    print("\n")
-                else:
-                    # 普通输出
-                    answer = self.ask_question(user_input, stream=False)
-                    print(f"{answer}\n")
-                
+                use_stream = self._read_stream_preference()
+                self._print_answer(user_input, use_stream)
             except KeyboardInterrupt:
                 break
             except Exception as e:
                 print(f"处理问题时出错: {e}")
-        
+
         print("\n感谢使用尝尝咸淡RAG系统！")
 
+    def _print_interactive_banner(self):
+        """打印命令行欢迎信息。"""
+        print("=" * 60)
+        print("🍽️  尝尝咸淡RAG系统 - 交互式问答  🍽️")
+        print("=" * 60)
+        print("💡 解决您的选择困难症，告别'今天吃什么'的世纪难题！")
+
+    def _prepare_interactive_session(self):
+        """准备交互式问答所需的模块和知识库。"""
+        self.initialize_system()
+        self.build_knowledge_base()
+
+    def _read_user_question(self) -> str:
+        """读取用户输入的问题。"""
+        return input("\n您的问题: ").strip()
+
+    def _should_exit_interactive(self, user_input: str) -> bool:
+        """统一维护退出条件，避免退出命令散落在主流程中。"""
+        return user_input.lower() in EXIT_COMMANDS
+
+    def _read_stream_preference(self) -> bool:
+        """读取是否采用流式输出，默认开启。"""
+        stream_choice = input("是否使用流式输出? (y/n, 默认y): ").strip().lower()
+        return stream_choice != 'n'
+
+    def _print_answer(self, question: str, use_stream: bool):
+        """根据输出模式打印回答。"""
+        print("\n回答:")
+
+        if use_stream:
+            # 流式输出适合较长回答，用户可以更早看到结果。
+            for chunk in self.ask_question(question, stream=True):
+                print(chunk, end="", flush=True)
+            print("\n")
+            return
+
+        answer = self.ask_question(question, stream=False)
+        print(f"{answer}\n")
+
+
+
+def create_rag_system() -> RecipeRAGSystem:
+    """创建 RAG 系统实例。"""
+    return RecipeRAGSystem()
+
+
+def run_cli_application():
+    """运行命令行版本的应用。"""
+    rag_system = create_rag_system()
+    rag_system.run_interactive()
+
+
+def handle_fatal_error(error: Exception):
+    """统一处理启动阶段的致命错误。"""
+    logger.error("系统运行出错: %s", error)
+    print(f"系统错误: {error}")
 
 
 def main():
-    """主函数"""
+    """
+    程序入口。
+
+    这里故意保持很短，只负责：
+    1. 启动命令行应用
+    2. 统一兜底异常
+    """
     try:
-        # 创建RAG系统
-        rag_system = RecipeRAGSystem()
-        
-        # 运行交互式问答
-        rag_system.run_interactive()
-        
-    except Exception as e:
-        logger.error(f"系统运行出错: {e}")
-        print(f"系统错误: {e}")
+        run_cli_application()
+    except Exception as error:
+        handle_fatal_error(error)
 
 if __name__ == "__main__":
     main()

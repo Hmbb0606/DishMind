@@ -11,6 +11,32 @@ from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
+RECIPE_MARKDOWN_REQUIREMENTS = """请优先使用清晰的 Markdown 输出，并尽量遵循下面的结构：
+
+# 菜品名称
+
+### 🍽️ 菜品介绍
+[1-2 句概括风味、难度、耗时]
+
+### 🥬 食材清单
+- 食材名称 数量
+- 调料名称 数量
+
+### 🍳 制作步骤
+1. 第一步
+2. 第二步
+
+### 🌟 主厨贴士
+- 关键火候或替换建议
+
+要求：
+- 如果能够确定菜名，请单独放在一级标题 `# 菜名` 中
+- 标题保留 emoji，便于前端直接渲染
+- 不要使用 Markdown 表格
+- 食材清单必须使用 `- 食材 数量` 的无序列表
+- 没有相关内容时可以省略某一节，但不要编造
+- 重点写得实用、稳定、方便照做"""
+
 
 class GenerationIntegrationModule:
     """生成集成模块 - 负责LLM集成和回答生成"""
@@ -95,6 +121,8 @@ class GenerationIntegrationModule:
 相关食谱信息:
 {context}
 
+{RECIPE_MARKDOWN_REQUIREMENTS}
+
 请提供详细、实用的回答。如果信息不足，请诚实说明。
 
 回答:"""
@@ -110,19 +138,7 @@ class GenerationIntegrationModule:
 相关食谱信息:
 {context}
 
-请灵活组织回答，建议包含以下部分（可根据实际内容调整）：
-
-## 菜品介绍
-[简要介绍菜品特点和难度]
-
-## 所需食材
-[列出主要食材和用量]
-
-## 制作步骤
-[详细的分步骤说明，每步包含具体操作和大概所需时间]
-
-## 制作技巧
-[仅在有实用技巧时包含。优先使用原文中的实用技巧，如果原文的"附加内容"与烹饪无关或为空，可以基于制作步骤总结关键要点，或者完全省略此部分]
+{RECIPE_MARKDOWN_REQUIREMENTS}
 
 注意：
 - 根据实际内容灵活调整结构
@@ -209,15 +225,15 @@ class GenerationIntegrationModule:
                 dish_names.append(dish_name)
 
         if len(dish_names) == 1:
-            return f"为您推荐：{dish_names[0]}"
+            return f"### 🍽️ 推荐结果\n1. {dish_names[0]}"
         if len(dish_names) <= 3:
-            return "为您推荐以下菜品：\n" + "\n".join(
+            return "### 🍽️ 推荐结果\n" + "\n".join(
                 [f"{i + 1}. {name}" for i, name in enumerate(dish_names)]
             )
         return (
-            "为您推荐以下菜品：\n"
+            "### 🍽️ 推荐结果\n"
             + "\n".join([f"{i + 1}. {name}" for i, name in enumerate(dish_names[:3])])
-            + f"\n\n还有其他 {len(dish_names) - 3} 道菜品可供选择。"
+            + f"\n\n### ✨ 补充说明\n还有其他 {len(dish_names) - 3} 道菜品可供选择。"
         )
 
     def generate_basic_answer_stream(self, query: str, context_docs: List[Document]):
@@ -229,6 +245,8 @@ class GenerationIntegrationModule:
 
 相关食谱信息:
 {context}
+
+{RECIPE_MARKDOWN_REQUIREMENTS}
 
 请提供详细、实用的回答。如果信息不足，请诚实说明。
 
@@ -245,19 +263,7 @@ class GenerationIntegrationModule:
 相关食谱信息:
 {context}
 
-请灵活组织回答，建议包含以下部分（可根据实际内容调整）：
-
-## 菜品介绍
-[简要介绍菜品特点和难度]
-
-## 所需食材
-[列出主要食材和用量]
-
-## 制作步骤
-[详细的分步骤说明，每步包含具体操作和大概所需时间]
-
-## 制作技巧
-[仅在有实用技巧时包含。如果原文的"附加内容"与烹饪无关或为空，可以基于制作步骤总结关键要点，或者完全省略此部分]
+{RECIPE_MARKDOWN_REQUIREMENTS}
 
 注意：
 - 根据实际内容灵活调整结构

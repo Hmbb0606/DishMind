@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Source Han Sans CN", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: "Outfit", "Space Grotesk", -apple-system, sans-serif;
+  
+  --color-brand-50: #fffaf4;
+  --color-brand-100: #ffeed8;
+  --color-brand-200: #ffdcb3;
+  --color-brand-500: #f36c21;
+  --color-brand-600: #df5813;
+  --color-brand-700: #b9420b;
+  --color-brand-900: #621e02;
+  
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-float-slow: float 9s ease-in-out infinite;
+  --animate-sparkle: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(3deg);
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* Custom gorgeous scrollbar for our cozy recipe companion */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e5dfd9;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+/* Custom selection highlight */
+.recipe-interactive-item {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+

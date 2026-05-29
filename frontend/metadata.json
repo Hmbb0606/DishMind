@@ -1,0 +1,6 @@
+{
+  "name": "DishMind",
+  "description": "智能食谱问答与健康美食助理，为您解答菜品制作、提供智能推荐和食材搭配方案，让下厨变得轻松有趣！",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

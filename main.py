@@ -158,6 +158,7 @@ class RecipeRAGSystem:
         relevant_chunks = self._find_direct_match_chunks(question)
 
         if relevant_chunks:
+            # 去重
             matched_dishes = self._get_unique_dish_names(relevant_chunks)
             print(f"🎯 命中精确菜名: {', '.join(matched_dishes)}")
         else:
@@ -272,14 +273,18 @@ class RecipeRAGSystem:
         这类问题如果完全依赖向量/BM25 检索，可能因为分词或重排结果
         把真正的目标菜品挤出前几名，因此先做一次基于 dish_name 的精确匹配。
         """
+        # 这里规范化一下
+        # 宫保鸡丁怎么做？ -> 宫保鸡丁怎么做
+        # 西红柿炒鸡蛋，需要什么食材？ -> 西红柿炒鸡蛋需要什么食材
         normalized_query = self._normalize_text(query)
         matched_parent_ids = []
 
+        # 如果文档菜名是用户问题字符串的子串，就认为用户明确点名了这道菜。
         for doc in self.data_module.documents:
             dish_name = doc.metadata.get('dish_name', '')
             if not dish_name:
                 continue
-
+            # 那么 宫保鸡丁 in 宫保鸡丁怎么做 为真，就命中。
             normalized_dish_name = self._normalize_text(dish_name)
             if normalized_dish_name and normalized_dish_name in normalized_query:
                 matched_parent_ids.append(doc.metadata.get('parent_id'))
@@ -293,6 +298,7 @@ class RecipeRAGSystem:
                 chunk for chunk in self.data_module.chunks
                 if chunk.metadata.get('parent_id') == parent_id
             ]
+            # 按 chunk 在原文里出现的先后顺序排
             parent_chunks.sort(key=lambda chunk: chunk.metadata.get('chunk_index', 0))
             matched_chunks.extend(parent_chunks[:max(self.config.top_k, 3)])
 

@@ -1,0 +1,51 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_IMAGE: docker.m.daocloud.io/library/node:20-bookworm-slim
+        APT_MIRROR: mirrors.aliyun.com
+        PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+        PIP_TRUSTED_HOST: pypi.tuna.tsinghua.edu.cn
+        NPM_REGISTRY: https://registry.npmmirror.com
+    container_name: dishmind-app
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      PORT: 3000
+      PYTHON_BRIDGE_MODE: direct
+      PYTHON_BIN: python
+      HF_ENDPOINT: https://hf-mirror.com
+      HF_HOME: /app/.cache/huggingface
+      SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence_transformers
+    volumes:
+      - dishmind_vector_index:/app/vector_index
+      - dishmind_hf_cache:/app/.cache/huggingface
+      - dishmind_sentence_cache:/app/.cache/sentence_transformers
+    expose:
+      - "3000"
+
+  caddy:
+    image: docker.m.daocloud.io/library/caddy:2.8-alpine
+    container_name: dishmind-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      DOMAIN: dishmind.hihili.cn
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  dishmind_vector_index:
+  dishmind_hf_cache:
+  dishmind_sentence_cache:
+  caddy_data:
+  caddy_config:

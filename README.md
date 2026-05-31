@@ -40,6 +40,8 @@ React 前端
 
 ```text
 DishMind/
+├── deploy/                  # Docker 反向代理配置
+├── docker/                  # Docker 专用依赖与辅助文件
 ├── assets/                  # README 截图资源
 ├── data/recipes/            # 本地 Markdown 食谱知识库
 ├── frontend/                # React + Vite + Express 前端与接口层
@@ -66,7 +68,9 @@ DishMind/
 ### 前后端协作方式
 
 - `frontend/server.ts` 暴露 `/api/chat` 和 `/api/health`
-- Node 服务启动后会通过 `conda run -n cook-rag python backend_bridge.py` 拉起 Python 进程
+- Node 服务支持两种 bridge 启动方式：
+- 本地开发默认通过 `conda run -n cook-rag python backend_bridge.py` 拉起 Python 进程
+- Docker/服务器可切换为直接执行 `python backend_bridge.py`
 - `backend_bridge.py` 使用 stdin/stdout 与 Node 通信，不改动原有 RAG 主流程
 - 前端只和 Node 接口交互，不直接调用 Python 或模型 API
 
@@ -100,7 +104,7 @@ DishMind/
 
 - 嵌入模型：`BAAI/bge-small-zh-v1.5`
 - LLM provider：`deepseek`
-- LLM model：`deepseek-v4-flash`
+- LLM model：`deepseek-v4-pro`
 
 需要至少配置以下之一：
 
@@ -172,7 +176,78 @@ http://localhost:3000
 
 ## 生产部署方式
 
-当前仓库已经具备基础生产构建能力，但未包含容器编排、进程守护和反向代理配置。推荐按下面方式部署。
+当前仓库同时提供 Docker 部署方案和非 Docker 部署方案。对服务器上线而言，优先推荐 Docker。
+
+## Docker 部署
+
+仓库已补齐以下文件，可直接用于服务器部署：
+
+- [Dockerfile](/home/wenhai-li/Code/Agent/DishMind/Dockerfile)
+- [docker-compose.yml](/home/wenhai-li/Code/Agent/DishMind/docker-compose.yml)
+- [docker/requirements.docker.txt](/home/wenhai-li/Code/Agent/DishMind/docker/requirements.docker.txt)
+- [deploy/caddy/Caddyfile](/home/wenhai-li/Code/Agent/DishMind/deploy/caddy/Caddyfile)
+- [.env.docker.example](/home/wenhai-li/Code/Agent/DishMind/.env.docker.example)
+
+### Docker 方案说明
+
+- 应用容器内直接运行 `python backend_bridge.py`，不再依赖 conda
+- 前端使用多阶段构建，运行时只保留生产构件
+- 默认使用以下国内镜像源：
+- `apt`：`mirrors.aliyun.com`
+- `pip`：清华 PyPI 镜像
+- `npm`：`registry.npmmirror.com`
+- 反向代理使用 Caddy，默认绑定 `dishmind.hihili.cn`
+- Caddy 会自动申请和续签 HTTPS 证书，前提是服务器的 `80/443` 端口已放行
+
+### 服务器部署步骤
+
+1. 在服务器上安装 Docker 和 Docker Compose Plugin。
+2. 拉取项目代码到服务器，例如 `/srv/dishmind`。
+3. 复制 Docker 环境变量模板：
+
+```bash
+cp .env.docker.example .env.docker
+```
+
+4. 编辑 `.env.docker`，填入至少一个模型密钥：
+
+```bash
+DEEPSEEK_API_KEY=your_deepseek_api_key
+```
+
+5. 启动服务：
+
+```bash
+docker compose up -d --build
+```
+
+6. 验证服务：
+
+```bash
+docker compose ps
+docker compose logs -f app
+docker compose logs -f caddy
+```
+
+如果服务器安全组和系统防火墙已经放行 `80/443`，Caddy 会为 `https://dishmind.hihili.cn` 自动签发证书。
+
+### Docker 运行细节
+
+- `app` 服务监听容器内 `3000`
+- `caddy` 服务对外暴露 `80/443`
+- 向量索引持久化到 Docker volume `dishmind_vector_index`
+- Hugging Face 缓存持久化到 `dishmind_hf_cache`
+- sentence-transformers 缓存持久化到 `dishmind_sentence_cache`
+
+### Docker 常用命令
+
+```bash
+docker compose up -d --build
+docker compose pull
+docker compose logs -f app
+docker compose restart app
+docker compose down
+```
 
 ### 1. 构建前端与 Node 服务
 
@@ -194,7 +269,7 @@ cd frontend
 NODE_ENV=production PORT=3000 node dist/server.cjs
 ```
 
-### 3. 生产部署建议
+### 3. 非 Docker 生产部署建议
 
 - 使用 `conda` 预先创建并固定 `cook-rag` 环境
 - 通过 `systemd`、`supervisor` 或容器进程管理 Node 服务
@@ -271,6 +346,7 @@ NODE_ENV=production PORT=3000 node dist/server.cjs
 ## 已知注意事项
 
 - `requirements.txt` 是基于当前 `cook-rag` 环境导出的完整快照，包含环境中已安装但未必在运行时严格必需的包。
-- Python bridge 启动依赖 `conda run`，如果生产环境不使用 conda，需要同步调整 [frontend/server.ts](/home/wenhai-li/Code/Agent/DishMind/frontend/server.ts)。
+- Docker 构建使用的是 [docker/requirements.docker.txt](/home/wenhai-li/Code/Agent/DishMind/docker/requirements.docker.txt) 这份精简运行时依赖，而不是完整 `pip freeze` 快照。
+- Python bridge 现在支持 `conda` 和 `direct` 两种启动模式，可通过 `PYTHON_BRIDGE_MODE` 切换。
 - 首次构建索引和首次加载嵌入模型可能较慢。
 - 如果访问 Hugging Face 官方源受限，嵌入模型初始化会失败，需要使用镜像或改为本地模型目录。

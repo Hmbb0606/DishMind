@@ -1,0 +1,17 @@
+.git
+.gitignore
+.idea
+.vscode
+.codex
+.agents
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.local
+frontend/node_modules
+frontend/dist
+vector_index
+README.md
+assets

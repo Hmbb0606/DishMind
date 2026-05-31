@@ -3,13 +3,13 @@
 前端现在不再直接调用 Gemini demo，而是通过 `frontend/server.ts` 启动一个桥接层：
 
 - Node 负责页面渲染和 `/api/chat`
-- `/api/chat` 会自动拉起 `cook-rag` conda 环境中的 Python RAG 进程
+- `/api/chat` 会自动拉起 Python RAG 进程
 - Python 端复用项目原有的检索、重写、路由和生成逻辑
 
 ## 运行方式
 
-1. 确保 `cook-rag` 环境已安装根目录 `requirements.txt` 中的依赖
-2. 在 `cook-rag` 环境里配置模型密钥，例如 `DEEPSEEK_API_KEY`
+1. 本地开发默认使用 `cook-rag` conda 环境，并安装根目录 `requirements.txt`
+2. 在项目根目录 `.env` 中配置模型密钥，例如 `DEEPSEEK_API_KEY`
 3. 安装前端依赖：
 
 ```bash
@@ -24,6 +24,16 @@ npm run dev
 ```
 
 默认地址：`http://localhost:3000`
+
+## 启动模式
+
+- 本地开发：`PYTHON_BRIDGE_MODE=conda`
+- Docker/服务器：`PYTHON_BRIDGE_MODE=direct`
+
+默认还支持：
+
+- `CONDA_ENV_NAME`：本地 conda 环境名，默认 `cook-rag`
+- `PYTHON_BIN`：Python 可执行文件名，默认 `python`
 
 ## 当前能力
 

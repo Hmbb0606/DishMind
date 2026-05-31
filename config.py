@@ -17,7 +17,7 @@ class RAGConfig:
     # 模型配置
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     llm_provider: str = "deepseek"
-    llm_model: str = "deepseek-v4-flash"
+    llm_model: str = "deepseek-v4-pro"
     llm_base_url: str = ""
     llm_api_key_env: str = ""
 

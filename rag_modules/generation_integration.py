@@ -45,7 +45,7 @@ class GenerationIntegrationModule:
         "deepseek": {
             "base_url": "https://api.deepseek.com",
             "api_key_env": "DEEPSEEK_API_KEY",
-            "model": "deepseek-v4-flash",
+            "model": "deepseek-v4-pro",
         },
         "moonshot": {
             "base_url": "https://api.moonshot.cn/v1",
@@ -61,7 +61,7 @@ class GenerationIntegrationModule:
 
     def __init__(
         self,
-        model_name: str = "deepseek-v4-flash",
+        model_name: str = "deepseek-v4-pro",
         temperature: float = 0.1,
         max_tokens: int = 2048,
         provider: str = "deepseek",
@@ -82,7 +82,7 @@ class GenerationIntegrationModule:
         self.provider = provider.lower().strip()
         provider_defaults = self.PROVIDER_DEFAULTS.get(self.provider, {})
 
-        self.model_name = model_name or provider_defaults.get("model") or "deepseek-v4-flash"
+        self.model_name = model_name or provider_defaults.get("model") or "deepseek-v4-pro"
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.base_url = base_url.strip() or provider_defaults.get("base_url")

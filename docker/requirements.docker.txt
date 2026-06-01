@@ -6,6 +6,7 @@ langchain-text-splitters==0.3.8
 faiss-cpu==1.14.2
 Markdown==3.8.2
 sentence-transformers==5.5.1
+torch==2.6.0+cpu
 rank-bm25==0.2.2
 openai==1.109.1
 python-dotenv==1.2.2

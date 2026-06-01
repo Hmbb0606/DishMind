@@ -40,7 +40,7 @@ React 前端
 
 ```text
 DishMind/
-├── deploy/                  # Docker 反向代理配置
+├── deploy/                  # Docker 部署辅助配置
 ├── docker/                  # Docker 专用依赖与辅助文件
 ├── assets/                  # README 截图资源
 ├── data/recipes/            # 本地 Markdown 食谱知识库
@@ -49,7 +49,7 @@ DishMind/
 ├── backend_bridge.py        # Node 与 Python RAG 的桥接进程
 ├── config.py                # RAG 配置
 ├── main.py                  # Python RAG 主程序
-├── requirements.txt         # cook-rag 环境导出的 Python 依赖
+├── requirements.txt         # dishmind 环境导出的 Python 依赖
 ├── start.sh                 # 一键启动脚本
 └── vector_index/            # 本地持久化向量索引
 ```
@@ -69,7 +69,7 @@ DishMind/
 
 - `frontend/server.ts` 暴露 `/api/chat` 和 `/api/health`
 - Node 服务支持两种 bridge 启动方式：
-- 本地开发默认通过 `conda run -n cook-rag python backend_bridge.py` 拉起 Python 进程
+- 本地开发默认通过 `conda run -n dishmind python backend_bridge.py` 拉起 Python 进程
 - Docker/服务器可切换为直接执行 `python backend_bridge.py`
 - `backend_bridge.py` 使用 stdin/stdout 与 Node 通信，不改动原有 RAG 主流程
 - 前端只和 Node 接口交互，不直接调用 Python 或模型 API
@@ -90,8 +90,8 @@ DishMind/
 ### Python
 
 - 建议使用 `conda` 管理环境
-- 项目默认 Python 环境名为 `cook-rag`
-- 根目录 `requirements.txt` 已按当前 `cook-rag` 环境重新导出
+- 项目默认 Python 环境名为 `dishmind`
+- 根目录 `requirements.txt` 已按当前 `dishmind` 环境重新导出
 
 ### Node.js
 
@@ -123,8 +123,8 @@ HF_ENDPOINT=https://hf-mirror.com
 ### 1. 创建并准备 conda 环境
 
 ```bash
-conda create -n cook-rag python=3.11 -y
-conda activate cook-rag
+conda create -n dishmind python=3.11 -y
+conda activate dishmind
 pip install -r requirements.txt
 ```
 
@@ -169,7 +169,7 @@ http://localhost:3000
 `start.sh` 会做以下事情：
 
 - 检查 `conda` 和 `npm` 是否存在
-- 检查 `cook-rag` 环境是否存在
+- 检查 `dishmind` 环境是否存在
 - 检查 `frontend/node_modules` 是否已安装
 - 在 `frontend/` 下启动 `npm run dev`
 - 首次请求或服务预热时拉起 Python RAG bridge
@@ -185,65 +185,81 @@ http://localhost:3000
 - [Dockerfile](/home/wenhai-li/Code/Agent/DishMind/Dockerfile)
 - [docker-compose.yml](/home/wenhai-li/Code/Agent/DishMind/docker-compose.yml)
 - [docker/requirements.docker.txt](/home/wenhai-li/Code/Agent/DishMind/docker/requirements.docker.txt)
-- [deploy/caddy/Caddyfile](/home/wenhai-li/Code/Agent/DishMind/deploy/caddy/Caddyfile)
-- [.env.docker.example](/home/wenhai-li/Code/Agent/DishMind/.env.docker.example)
+- [deploy/docker/daemon.json.example](/home/wenhai-li/Code/Agent/DishMind/deploy/docker/daemon.json.example)
 
 ### Docker 方案说明
 
 - 应用容器内直接运行 `python backend_bridge.py`，不再依赖 conda
 - 前端使用多阶段构建，运行时只保留生产构件
+- 容器直接对外映射宿主机 `3000:3000`
+- 根目录 `.env` 会随镜像一起打包，上传压缩包后不需要再额外复制
 - 默认使用以下国内镜像源：
 - `apt`：`mirrors.aliyun.com`
 - `pip`：清华 PyPI 镜像
 - `npm`：`registry.npmmirror.com`
-- 反向代理使用 Caddy，默认绑定 `dishmind.hihili.cn`
-- Caddy 会自动申请和续签 HTTPS 证书，前提是服务器的 `80/443` 端口已放行
+- 基础镜像默认从 `docker.m.daocloud.io` 拉取
+- 如服务器拉取 Docker Hub 仍慢，可额外配置 Docker daemon 国内镜像源
 
 ### 服务器部署步骤
 
 1. 在服务器上安装 Docker 和 Docker Compose Plugin。
-2. 拉取项目代码到服务器，例如 `/srv/dishmind`。
-3. 复制 Docker 环境变量模板：
+2. 放行腾讯云安全组和服务器防火墙的 `3000/TCP`。
+3. 将项目压缩包上传到服务器，例如放到 `/srv/dishmind`。
+4. 解压项目：
 
 ```bash
-cp .env.docker.example .env.docker
+mkdir -p /srv/dishmind
+cd /srv/dishmind
+unzip DishMind.zip
 ```
 
-4. 编辑 `.env.docker`，填入至少一个模型密钥：
+5. 确认根目录 `.env` 已包含至少一个模型密钥，因为它会直接进入镜像：
 
 ```bash
 DEEPSEEK_API_KEY=your_deepseek_api_key
 ```
 
-5. 启动服务：
+6. 如服务器 Docker 拉镜像慢，先配置 daemon 国内镜像源：
+
+```bash
+sudo mkdir -p /etc/docker
+sudo cp deploy/docker/daemon.json.example /etc/docker/daemon.json
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+7. 启动服务：
 
 ```bash
 docker compose up -d --build
 ```
 
-6. 验证服务：
+8. 验证服务：
 
 ```bash
 docker compose ps
 docker compose logs -f app
-docker compose logs -f caddy
 ```
 
-如果服务器安全组和系统防火墙已经放行 `80/443`，Caddy 会为 `https://dishmind.hihili.cn` 自动签发证书。
+9. 浏览器访问：
+
+```text
+http://124.221.26.10:3000
+```
 
 ### Docker 运行细节
 
 - `app` 服务监听容器内 `3000`
-- `caddy` 服务对外暴露 `80/443`
+- 宿主机直接暴露 `3000`
 - 向量索引持久化到 Docker volume `dishmind_vector_index`
 - Hugging Face 缓存持久化到 `dishmind_hf_cache`
 - sentence-transformers 缓存持久化到 `dishmind_sentence_cache`
+- 如果修改了根目录 `.env`，需要重新执行 `docker compose up -d --build`
 
 ### Docker 常用命令
 
 ```bash
 docker compose up -d --build
-docker compose pull
 docker compose logs -f app
 docker compose restart app
 docker compose down
@@ -271,7 +287,7 @@ NODE_ENV=production PORT=3000 node dist/server.cjs
 
 ### 3. 非 Docker 生产部署建议
 
-- 使用 `conda` 预先创建并固定 `cook-rag` 环境
+- 使用 `conda` 预先创建并固定 `dishmind` 环境
 - 通过 `systemd`、`supervisor` 或容器进程管理 Node 服务
 - 在 Nginx 或 Caddy 后挂载 `3000` 端口
 - 将模型 API Key 以环境变量方式注入，不要写入仓库
@@ -345,8 +361,9 @@ NODE_ENV=production PORT=3000 node dist/server.cjs
 
 ## 已知注意事项
 
-- `requirements.txt` 是基于当前 `cook-rag` 环境导出的完整快照，包含环境中已安装但未必在运行时严格必需的包。
+- `requirements.txt` 是基于当前 `dishmind` 环境导出的完整快照，包含环境中已安装但未必在运行时严格必需的包。
 - Docker 构建使用的是 [docker/requirements.docker.txt](/home/wenhai-li/Code/Agent/DishMind/docker/requirements.docker.txt) 这份精简运行时依赖，而不是完整 `pip freeze` 快照。
 - Python bridge 现在支持 `conda` 和 `direct` 两种启动模式，可通过 `PYTHON_BRIDGE_MODE` 切换。
 - 首次构建索引和首次加载嵌入模型可能较慢。
 - 如果访问 Hugging Face 官方源受限，嵌入模型初始化会失败，需要使用镜像或改为本地模型目录。
+- 由于你要求把 `.env` 一起打进镜像，镜像内会包含敏感配置；上传压缩包和分发镜像时要注意访问控制。

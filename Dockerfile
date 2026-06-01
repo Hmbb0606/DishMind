@@ -19,6 +19,7 @@ FROM ${NODE_IMAGE} AS runtime
 ARG APT_MIRROR=mirrors.aliyun.com
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
@@ -48,7 +49,8 @@ WORKDIR /app
 
 COPY docker/requirements.docker.txt /tmp/requirements.docker.txt
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r /tmp/requirements.docker.txt
+    && pip install --index-url "${PYTORCH_CPU_INDEX_URL}" --trusted-host download.pytorch.org torch==2.6.0+cpu \
+    && pip install --extra-index-url "${PYTORCH_CPU_INDEX_URL}" --trusted-host download.pytorch.org -r /tmp/requirements.docker.txt
 
 COPY . /app
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist

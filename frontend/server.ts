@@ -6,15 +6,15 @@ import { createServer as createViteServer } from "vite";
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import readline from "readline";
 
-dotenv.config();
-
-const app = express();
-const PORT = Number(process.env.PORT || 3000);
 const frontendDir = process.cwd();
 const projectRoot = path.resolve(frontendDir, "..");
+dotenv.config({ path: path.join(projectRoot, ".env") });
+dotenv.config();
+const app = express();
+const PORT = Number(process.env.PORT || 3000);
 const bridgeScript = path.join(projectRoot, "backend_bridge.py");
 const bridgeMode = (process.env.PYTHON_BRIDGE_MODE || "conda").trim().toLowerCase();
-const condaEnvName = (process.env.CONDA_ENV_NAME || "cook-rag").trim();
+const condaEnvName = (process.env.CONDA_ENV_NAME || "dishmind").trim();
 const pythonBin = (process.env.PYTHON_BIN || "python").trim();
 
 app.use(express.json({ limit: "1mb" }));
